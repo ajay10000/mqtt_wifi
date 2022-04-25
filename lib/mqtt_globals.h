@@ -1,5 +1,5 @@
 // Globals for MQTT 
-#include <iostream>
+#include <string>
 
 extern const std::string logger_name;
 extern const std::string mqtt_topic;
