@@ -8,6 +8,6 @@ void setup() {
 
 }
 
-void main() {
+void loop() {
 
 }
