@@ -6,7 +6,7 @@
 #include <mqtt_globals.h>  // Private library
 #include <credentials.h>  // Private library
 
-// rev_name = "MQTT_WiFi_v1b";
+// rev_name = "MQTT_WiFi_v1c";
 // ssid, password and CA cert stored in credentials.h
 
 #define MY_DEBUG                // Enable debug to serial monitor
