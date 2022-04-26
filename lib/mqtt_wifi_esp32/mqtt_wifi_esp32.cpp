@@ -6,7 +6,7 @@
 #include <mqtt_globals.h>  // Private library
 #include <credentials.h>  // Private library
 
-// rev_name = "MQTT_WiFi_v1c";
+// rev_name = "MQTT_WiFi_v1d";
 // ssid, password and CA cert stored in credentials.h
 
 #define MY_DEBUG                // Enable debug to serial monitor
@@ -46,14 +46,21 @@ void initMqtt() {
   //  mqtt_client.setCallback(callback);
   mqtt_wifi.setCACert(root_ca_cert); // for CA certificate verification
   Serial.printf("WiFi connecting to MQTT server");
+  
   int i = 0;
   while (not mqtt_wifi.connected() && (i < 5)) {
     mqtt_wifi.connect(mqtt_server, mqtt_port);
     Serial.printf(".");
     delay(1000);
+    i++;
   }
-  mqtt_client.begin(mqtt_wifi);
-  Serial.printf("\n");
+  // Debugging for error: [WiFiGeneric.cpp:1230] hostByName(): DNS Failed for...
+  try {
+    mqtt_client.begin(mqtt_wifi);
+  } catch (...) {
+    delay(100);
+    ESP.restart();
+  }
 }
 
 // This function connects to the MQTT server
