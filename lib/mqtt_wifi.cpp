@@ -17,7 +17,7 @@ const int mqtt_port = 8883;                  // MQTT port
 char topic[MSG_BUFFER_SIZE];
 char msg[MSG_BUFFER_SIZE];
 
-WiFiClientSecure wifi;
+WiFiClientSecure mqtt_wifi;
 MQTTPubSubClient mqtt_client;
 
 void connectToWiFi() {
@@ -39,6 +39,21 @@ void connectToWiFi() {
         Serial.printf("WiFi connection FAILED.\n");
     }
   #endif
+}
+
+void initMqtt() {
+  // MQTT server/broker init and callback for subscribe only
+  //  mqtt_client.setCallback(callback);
+  mqtt_wifi.setCACert(root_ca_cert); // for CA certificate verification
+  Serial.printf("WiFi connecting to MQTT server");
+  int i = 0;
+  while (not mqtt_wifi.connected() && (i < 5)) {
+    mqtt_wifi.connect(mqtt_server, mqtt_port);
+    Serial.printf(".");
+    delay(1000);
+  }
+  mqtt_client.begin(mqtt_wifi);
+  Serial.printf("\n");
 }
 
 // This function connects to the MQTT server
@@ -67,7 +82,7 @@ void MqttConnect() {
           Serial.printf("MQTT not connected.\n");  //, rc= %s", mqtt_client.state());
         #endif
         //char lastError[100];
-        //wifi.lastError(lastError,100);  //Get the last error for WiFiClientSecure
+        //mqtt_wifi.lastError(lastError,100);  //Get the last error for WiFiClientSecure
         //Serial.printf("WiFiClientSecure client state: %s",lastError);
       } else {
         #ifdef MY_DEBUG
