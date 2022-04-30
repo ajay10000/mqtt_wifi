@@ -1,12 +1,16 @@
 // WiFi and MQTT connections
 
+#ifdef ESP32
 #include <WiFi.h>
+#elif defined(ESP8266)
+#include <ESP8266WiFi.h>
+#endif
 #include <WiFiClientSecure.h>
 #include <MQTTPubSubClient.h>
 #include <mqtt_globals.h>  // Private library
 #include <credentials.h>  // Private library
 
-// rev_name = "MQTT_WiFi_v1d";
+const String rev_name = "MQTT_WiFi_v2a";
 // ssid, password and CA cert stored in credentials.h
 
 #define MY_DEBUG                // Enable debug to serial monitor
@@ -33,7 +37,7 @@ void connectToWiFi() {
   }
   #ifdef MY_DEBUG
     if (WiFi.status() == WL_CONNECTED) {
-        Serial.printf("WiFi Connected, IP address: %s, ", WiFi.localIP().toString());
+        Serial.printf("WiFi Connected, IP address: %s, ", WiFi.localIP().toString().c_str());
         Serial.printf("RRSI: %i.\n", WiFi.RSSI());
     } else {
         Serial.printf("WiFi connection FAILED.\n");
@@ -44,9 +48,12 @@ void connectToWiFi() {
 void initMqtt() {
   // MQTT server/broker init and callback for subscribe only
   //  mqtt_client.setCallback(callback);
-  mqtt_wifi.setCACert(root_ca_cert); // for CA certificate verification
+  #ifdef ESP32
+    mqtt_wifi.setCACert(root_ca_cert); // for CA certificate verification
+  #elif defined(ESP8266)
+   ESP8266: mqtt_wifi.setFingerprint(fingerprint);  // server cert fingerprint
+  #endif
   Serial.printf("WiFi connecting to MQTT server");
-  
   int i = 0;
   while (not mqtt_wifi.connected() && (i < 5)) {
     mqtt_wifi.connect(mqtt_server, mqtt_port);
@@ -106,7 +113,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
   #ifdef MY_DEBUG
     Serial.printf("\n");  
     Serial.printf("Message in: %s = ", topic);
-    for (int i = 0; i < length; i++) {
+    for (unsigned int i = 0; i < length; i++) {
       Serial.printf("%c", (char)payload[i]);
     }
   #endif
