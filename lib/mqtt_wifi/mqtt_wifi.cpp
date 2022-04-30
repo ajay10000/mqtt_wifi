@@ -51,7 +51,7 @@ void initMqtt() {
   #ifdef ESP32
     mqtt_wifi.setCACert(root_ca_cert); // for CA certificate verification
   #elif defined(ESP8266)
-   ESP8266: mqtt_wifi.setFingerprint(fingerprint);  // server cert fingerprint
+    mqtt_wifi.setFingerprint(fingerprint);  // server cert fingerprint
   #endif
   Serial.printf("WiFi connecting to MQTT server");
   int i = 0;
