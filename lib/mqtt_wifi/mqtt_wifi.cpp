@@ -7,10 +7,11 @@
 #endif
 #include <WiFiClientSecure.h>
 #include <MQTTPubSubClient.h>
+#include <iostream>
 #include <mqtt_globals.h>  // Private library
 #include <credentials.h>  // Private library
 
-const String rev_name = "MQTT_WiFi_v2a";
+//const String rev_name = "MQTT_WiFi_v2c";
 // ssid, password and CA cert stored in credentials.h
 
 #define MY_DEBUG                // Enable debug to serial monitor
@@ -25,48 +26,58 @@ WiFiClientSecure mqtt_wifi;
 MQTTPubSubClient mqtt_client;
 
 void connectToWiFi() {
-  //Serial.printf("\n");
-  //Serial.printf("Connecting to WiFi");
+  Serial.printf("\nConnecting to WiFi");
   WiFi.mode( WIFI_STA );
   WiFi.begin( ssid, password );
   int retries = 0;
   while ((WiFi.status() != WL_CONNECTED) && (retries < 5)) {
     retries++;
     delay(3000);
-    //Serial.printf(".");
+    Serial.printf(".");
   }
   #ifdef MY_DEBUG
     if (WiFi.status() == WL_CONNECTED) {
-        Serial.printf("WiFi Connected, IP address: %s, ", WiFi.localIP().toString().c_str());
+        Serial.printf(" WiFi Connected, IP address: %s, ", WiFi.localIP().toString().c_str());
         Serial.printf("RRSI: %i.\n", WiFi.RSSI());
     } else {
-        Serial.printf("WiFi connection FAILED.\n");
+        Serial.printf(" WiFi connection FAILED.\n");
     }
   #endif
 }
 
 void initMqtt() {
   // MQTT server/broker init and callback for subscribe only
-  //  mqtt_client.setCallback(callback);
+  //mqtt_client.setCallback(callback);
   #ifdef ESP32
     mqtt_wifi.setCACert(root_ca_cert); // for CA certificate verification
   #elif defined(ESP8266)
     mqtt_wifi.setFingerprint(fingerprint);  // server cert fingerprint
+    Serial.printf("ESP8266: Fingerprint set.\n");
   #endif
-  Serial.printf("WiFi connecting to MQTT server");
-  int i = 0;
+  Serial.printf("Initialising connection to server");
+  unsigned int i = 0;
   while (not mqtt_wifi.connected() && (i < 5)) {
+    //try {
     mqtt_wifi.connect(mqtt_server, mqtt_port);
+    // }
+    // catch(const std::exception& e) {
+    //   std::cerr << e.what() << '\n';
+    // }
     Serial.printf(".");
     delay(1000);
     i++;
   }
-  // Debugging for error: [WiFiGeneric.cpp:1230] hostByName(): DNS Failed for...
-  try {
-    mqtt_client.begin(mqtt_wifi);
-  } catch (...) {
-    delay(100);
-    ESP.restart();
+  if (mqtt_wifi.connected()) {
+    Serial.printf(" Connected.\n");
+    // Debugging for error: [WiFiGeneric.cpp:1230] hostByName(): DNS Failed for...
+    try {
+      mqtt_client.begin(mqtt_wifi);
+    } catch (...) {
+      delay(100);
+      ESP.restart();
+    }
+  } else {
+    Serial.printf(" Cannot connect.\n");
   }
 }
 
@@ -77,13 +88,12 @@ void MqttConnect() {
   } 
   
   // Loop until we're connected, max. 5 times
-  int i = 0;
+  unsigned int i = 0;
+  Serial.printf("Connecting to MQTT server: ");
   while ((!mqtt_client.isConnected()) && (i < 5)) {
     if (mqtt_client.connect(logger_name.c_str())) {
       #ifdef MY_DEBUG
-        Serial.printf("MQTT connected.\n");
-        Serial.printf("Client: %s, ",logger_name.c_str());
-        Serial.printf("MQTT server: %s\n",mqtt_server);
+        Serial.printf("Client %s is connected to %s.\n",logger_name.c_str(), mqtt_server);
         //Serial.printf("Client state: %s \n",String(mqtt_client.state()));
       #endif
       //snprintf (topic, sizeof(topic), "%s%s", mqtt_topic.c_str(), "client");
@@ -93,7 +103,7 @@ void MqttConnect() {
       if (i == 4) {
         // Only print it once
         #ifdef MY_DEBUG
-          Serial.printf("MQTT not connected.\n");  //, rc= %s", mqtt_client.state());
+          Serial.printf("Could not connect.\n");  //, rc= %s", mqtt_client.state());
         #endif
         //char lastError[100];
         //mqtt_wifi.lastError(lastError,100);  //Get the last error for WiFiClientSecure
