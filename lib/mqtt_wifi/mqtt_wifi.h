@@ -13,7 +13,7 @@
 #include <mqtt_globals.h>  // Private library
 #include <credentials.h>  // Private library
 
-//const String rev_name = "MQTT_WiFi_v2c";
+//const String rev_name = "MQTT_WiFi_v2d";
 // ssid, password and CA cert stored in credentials.h
 
 #define MY_DEBUG                // Enable debug to serial monitor
@@ -61,12 +61,7 @@ namespace mqtt_wifi {
     Serial.printf("Initialising connection to server");
     unsigned int i = 0;
     while (not mqtt_wifi.connected() && (i < 5)) {
-      //try {
       mqtt_wifi.connect(mqtt_server, mqtt_port);
-      // }
-      // catch(const std::exception& e) {
-      //   std::cerr << e.what() << '\n';
-      // }
       Serial.printf(".");
       delay(1000);
       i++;
@@ -89,8 +84,8 @@ namespace mqtt_wifi {
   void mqttConnect() {
     if (WiFi.status() != WL_CONNECTED) {
       connectToWiFi();
-    } 
-    
+    }
+
     // Loop until we're connected, max. 5 times
     unsigned int i = 0;
     Serial.printf("Connecting to MQTT server: ");
@@ -120,12 +115,12 @@ namespace mqtt_wifi {
         delay(1000);
         i++;
       }
-    }  
+    }
   }
 
   void mqtt_callback(char* topic, byte* payload, unsigned int length) {
     #ifdef MY_DEBUG
-      Serial.printf("\n");  
+      Serial.printf("\n");
       Serial.printf("Message in: %s = ", topic);
       for (unsigned int i = 0; i < length; i++) {
         Serial.printf("%c", (char)payload[i]);
