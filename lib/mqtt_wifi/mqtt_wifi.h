@@ -29,7 +29,7 @@ namespace mqtt_wifi {
   WiFiClientSecure mqtt_wifi;
   MQTTPubSubClient mqtt_client;
 
-  void connectToWiFi() {
+  void wifi_connect() {
     Serial.printf("\nConnecting to WiFi");
     WiFi.mode( WIFI_STA );
     WiFi.begin( ssid, password );
@@ -49,7 +49,13 @@ namespace mqtt_wifi {
     #endif
   }
 
-  void initMqtt() {
+  void wifi_disconnect() {
+    WiFi.disconnect(true);
+    delay(1);
+    WiFi.mode(WIFI_OFF);
+  }
+
+  void mqtt_init() {
     // MQTT server/broker init and callback for subscribe only
     //mqtt_client.setCallback(callback);
     #ifdef ESP32
@@ -81,9 +87,9 @@ namespace mqtt_wifi {
   }
 
   // This function connects to the MQTT server
-  void mqttConnect() {
+  void mqtt_connect() {
     if (WiFi.status() != WL_CONNECTED) {
-      connectToWiFi();
+      wifi_connect();
     }
 
     // Loop until we're connected, max. 5 times
@@ -95,6 +101,7 @@ namespace mqtt_wifi {
           Serial.printf("Client %s is connected to %s.\n",logger_name.c_str(), mqtt_server);
           //Serial.printf("Client state: %s \n",String(mqtt_client.state()));
         #endif
+        // Print connected message, etc.
         //snprintf (topic, sizeof(topic), "%s%s", mqtt_topic.c_str(), "client");
         //snprintf (msg, sizeof(msg), "Connected");
         //mqtt_client.publish(topic, msg);
@@ -117,6 +124,12 @@ namespace mqtt_wifi {
       }
     }
   }
+
+void mqtt_wifi_disconnect() {
+  mqtt_client.disconnect();   // Close MQTT connection
+  wifi_disconnect();        // Shut down wifi
+}
+
 
   void mqtt_callback(char* topic, byte* payload, unsigned int length) {
     #ifdef MY_DEBUG
