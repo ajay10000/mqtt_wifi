@@ -1,0 +1,26 @@
+{
+  "name": "MQTT Globals",
+  "version": "1.0.6",
+  "description": "Globals library for MQTT and WiFi.",
+  "keywords": "",
+  "repository":
+  {
+    "type": "git",
+    "url": ""
+  },
+  "authors":
+  [
+    {
+      "name": "",
+      "email": "",
+      "url": ""
+    }
+  ],
+  "license": "",
+  "homepage": "",
+  "dependencies": {
+
+  },
+  "frameworks": "*",
+  "platforms": "*"
+}

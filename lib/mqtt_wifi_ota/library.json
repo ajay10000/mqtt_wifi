@@ -1,0 +1,25 @@
+{
+  "name": "mqtt_wifi_ota",
+  "version": "1.0.4",
+  "description": "Library for sending MQTT data over WiFi and obtaining OTA updates from a server.",
+  "keywords": "",
+  "repository":
+  {
+    "type": "git",
+    "url": ""
+  },
+  "authors":
+  [
+    {
+      "name": "",
+      "email": "",
+      "url": ""
+    }
+  ],
+  "license": "",
+  "homepage": "",
+  "dependencies": {
+  },
+  "frameworks": "*",
+  "platforms": "*"
+}
