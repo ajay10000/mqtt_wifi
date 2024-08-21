@@ -3,5 +3,5 @@
 
 extern const std::string logger_name; // MQTT device name
 extern const std::string mqtt_topic;
-extern const std::string rev_name;    // global for sketch name
-extern const int ledPin;
+//extern const std::string rev_name;    // global for sketch name
+//extern const int ledPin;

@@ -1,0 +1,213 @@
+/* vi:ts=4
+ *
+ * Example shows how to use a TZ timezone string for local time timezone & DST
+ * local time works with/without an RTC and/or with/without NTP
+ * i.e. RTC only, NTP only or RTC and NTP
+ * If using WiFi and NTP, Configure your WiFi paramters
+ * Configure your your timezone TZ string
+ *
+ * If using only an RTC, then you won't need to set up NTP
+ * If using only NTP, you won't need to set the system time from the RTC
+ *
+ * NOTE: true time_t values are ALWAYS ALWAYS ALWAYS
+ *       the seconds since 1970-01-01 00:00:00 UTC
+ *       and local timezone or DST has absolutely no effect on a time_t value
+ *
+ * WARNING:
+ *	At the time this example was written,
+ *  the ESP8266 time_t value a signed 32 bit value. That means that the esp8266
+ *  time functions will suffer from the the Y2K38 problem:
+ *  https://en.wikipedia.org/wiki/Year_2038_problem
+ *  This means that the esp8266 time library code will malfunction starting:
+ *  03:14:07 on Tuesday, 19 January 2038 GMT
+ *
+ * Recommended use:
+ *	Bring up Serial monitor at 115200 *before* uploading
+ *	Upload code and observe results
+ *
+ * Code is realeased to the public domain
+ * 2020-10-03 Bill Perry
+*/
+
+#include <ESP8266WiFi.h>
+#include <time.h>		// time() ctime()
+#include <sys/time.h>		// struct timeval
+#include <coredecls.h>		// settimeofday_cb()
+
+
+////////////////////////////////////////////////////////
+
+//
+// WiFi setup
+//
+
+#define SSID            "yourSSID"
+#define SSIDPWD         "yourPassword"
+
+// TZ string setup
+// TZ string information:
+// https://www.gnu.org/software/libc/manual/html_node/TZ-Variable.html
+const char *TZstr = "CST+6CDT,M3.2.0/2,M11.1.0/2";
+
+////////////////////////////////////////////////////////
+
+// callback function that is called whenever time is set
+// When using NTP, It is called just *after* time is set by NTP
+// This callback is optional and can be used to trigger things when time is set
+// It is called each time NTP syncs the time.
+// It could potentially be used to update/set an RTC when NTP sets the time
+// NOTE:
+// 	Keep in mind that the callback is called whenever settimeofday() is called.
+//  So make sure to take that into account if calling settimeofday()
+
+
+
+timeval cbtime;			// when time set callback was called
+bool cbtime_set = false;
+
+void time_is_set (void)
+{
+	time_t t = time (nullptr);
+
+	gettimeofday (&cbtime, NULL);
+	cbtime_set = true;
+	Serial.println
+		("------------------ settimeofday() was called ------------------");
+	printf (" local asctime: %s\n",
+	 asctime (localtime (&t)));	// print formated local time
+
+	// set RTC using t if desired
+}
+
+void setup ()
+{
+	Serial.begin (115200);
+
+	// optional: set function to call when time is set
+	// is called by NTP code when NTP is used and NTP sets the time
+	// it is called just *after* NTP sets the time
+	settimeofday_cb (time_is_set);
+
+///////////////// Setting Time from RTC ///////////////////////////////////////
+	// If not using an RTC, this section can be deleted
+	// set time from RTC
+	// Normally you would read the RTC to get a current time_t value.
+	// NOTE:
+	//		true time_t values are ALWAYS ALWAYS ALWAYS
+	//		the seconds since 1970-01-01 00:00:00 UTC
+	//		and local timezone or DST has absolutely no effect on a time_t value
+	//
+	// this is faked for now.
+	time_t rtc_time_t = 946684800;	// fake RTC time:  2000-01-01 00:00:00 GMT
+
+	timeval tv = { rtc_time_t, 0 };
+
+	// set the time of day and explicitly set the timezone offsets to zero
+	// as there appears to be a default offset compiled in that needs to
+	// be set to zero to disable it.
+	// NOTE: normally, the second paramter of 
+	// settimeofday(const struct timeval *tv, const struct timezone *tz)
+	// should be a timezone struct pointer.
+	// but there is some kind of bug that if you use it, the TZ environment
+	// variable stuff breaks. So set the timezone parameter to NULL.
+	settimeofday (&tv, NULL); // this triggers a call to the settimeofday cb
+///////////////////////////////////////////////////////////////////////////////
+
+///////////////// Syncing Time Using NTP //////////////////////////////////////
+	// If not using NTP This section can be deleted
+	// DO NOT attempt to use the timezone offsets in configTime() !!!!!
+	// configTime(tzoffset, dstflg, "ntp-server1", "ntp-server2", "ntp-server3");
+	// The timezone offset code is really broken.
+	// if used, then localtime() and gmtime() won't work correctly.
+	// set both to zero and get real timezone & DST support by using TZ string
+	// enable NTP by setting NTP server
+	// up to 3 ntp servers can be specified
+	// configTime(0, 0, "server1", "server2", "server3");
+
+	// enable NTP by setting up NTP server(s)
+	// up to 3 ntp servers can be specified
+	// set both timezone offet and dst parameters to zero 
+	// and get real timezone & DST support by using a TZ string
+	// If not using a network, or NTP, don't use configTime()
+	configTime (TZstr, "pool.ntp.org");
+///////////////////////////////////////////////////////////////////////////////
+
+///////////////// Configure Local timezone ////////////////////////////////////
+	// this must always be done.
+	// set up TZ string to use a POSIX/gnu TZ string for local timezone
+	// TZ string information:
+	// https://www.gnu.org/software/libc/manual/html_node/TZ-Variable.html
+//	setenv ("TZ", TZstr, 1);
+
+//	tzset ();		// save the TZ variable
+///////////////////////////////////////////////////////////////////////////////
+
+///////////////// Start up WiFi network ///////////////////////////////////////
+	// If not using NTP or a networking this section can be removed.
+	// turn on WIFI using SSID/SSIDPWD
+	WiFi.mode (WIFI_STA);
+	WiFi.begin (SSID, SSIDPWD);
+///////////////////////////////////////////////////////////////////////////////
+
+	// don't wait, observe time changing when ntp timestamp is received
+
+	Serial.println ();
+}
+
+// for testing purpose:
+extern "C" int clock_gettime (clockid_t unused, struct timespec *tp);
+#define PTM(w) \
+  Serial.print(":" #w "="); \
+  Serial.print(tm->tm_##w);
+
+void printTm (const char* what, const tm* tm)
+{
+  Serial.print(what);
+  PTM(isdst); PTM(yday); PTM(wday);
+  PTM(year);  PTM(mon);  PTM(mday);
+  PTM(hour);  PTM(min);  PTM(sec);
+}
+
+
+timeval tv;
+struct timezone tz;
+timespec tp;
+time_t tnow;
+
+void loop ()
+{
+#if 0
+	if(!cbtime_set)		// don't do anything until NTP has set time
+		return;
+#endif
+
+	gettimeofday (&tv, &tz);
+	clock_gettime (0, &tp);	// also supported by esp8266 code
+	tnow = time (nullptr);
+
+	// localtime / gmtime every second change
+	static time_t lastv = 0;
+	if(lastv != tv.tv_sec)
+	{
+		lastv = tv.tv_sec;
+#if 1
+		printf ("tz_minuteswest: %d, tz_dsttime: %d\n",
+			tz.tz_minuteswest, tz.tz_dsttime);
+		printf ("gettimeofday() tv.tv_sec : %ld\n", lastv);
+		printf ("time()            time_t : %ld\n", tnow);
+		Serial.println ();
+#endif
+
+		printf ("         ctime: %s", ctime (&tnow));	// print formated local time
+		printf (" local asctime: %s", asctime (localtime (&tnow)));	// print formated local time
+		printf ("gmtime asctime: %s", asctime (gmtime (&tnow)));	// print formated gm time
+
+		// print gmtime and localtime tm members
+		printTm ("      gmtime", gmtime (&tnow));
+		Serial.println ();
+		printTm ("   localtime", localtime (&tnow));
+		Serial.println ();
+		Serial.println ();
+	}
+	delay (100);
+}
