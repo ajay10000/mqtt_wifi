@@ -9,7 +9,7 @@
 // MQTT, WiFi & OTA Updates managed by mqtt_wifi_ota.h library with these variables
 const std::string updatePath = "/firmware/";    // /path/ on webserver to firmware update
 const std::string fwName = "test1_mqtt_ota";  // Firmware file name on webserver
-const std::string revName = "v2o";  // Full name including revision
+const std::string revName = "v2p";  // Full name including revision
 const std::string updateString = updatePath + fwName;
 const std::string loggerName = "test-1"; // Unique logger/MQTT client ID
 const std::string mqttTopicPrefix = "tester/";   // MQTT location/path. Leave empty for no path
@@ -32,7 +32,7 @@ const float V_MIN = 4.5;    // Minimum voltage for slowing down readings to cons
 const float V_THRESH = 4.5; // Minimum voltage to measure
 
 // Declare functions
-void ledBlink(short numTimes = 2, short delayTime = 200);
+void ledBlink(short numTimes = 1, short delayTime = 200);
 
 // Set a map for each item to later send to mqtt
 // Can also be used for debugging via mqtt
@@ -142,8 +142,8 @@ void loop() {
         //Serial.printf("-> OTA update check complete millis: %lu ms\n", millis());
       }
 
-      // Blink LED every x cycles
-      if (loopCount % 10 == 0 || (bc % 10 == 0)) ledBlink();
+      // Blink LED every x loop cycles
+      if (loopCount % 10 == 0) ledBlink(2);
       loopCount++;
 
       // Publish MQTT messages to topics
