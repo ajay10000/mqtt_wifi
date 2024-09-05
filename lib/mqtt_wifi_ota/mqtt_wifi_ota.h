@@ -13,9 +13,11 @@
 //#include <Arduino.h>
 #include <MQTTPubSubClient.h>
 #include <time.h>
-#include <mqtt_globals.h>  // Private library
+#include <string>
 #include <credentials.h>  // Private library
 // ssid, password and CA cert stored in credentials.h
+
+#define MY_DEBUG
 
 namespace mqtt_wifi {
   const std::string branch_rev_name = "MQTT_WiFi_OTA_v1w";
@@ -26,18 +28,15 @@ namespace mqtt_wifi {
   const char* TZstr = "AEST-10AEDT,M10.1.0/2,M4.1.0/2";
   char timestr[30];                             // char buffer for date/time
   // MQTT variables
-  const char* mqttServer = "rpi4-2.ferndale";  // MQTT server
+  const char* mqttServer = "rpi4-2.ferndale";  // MQTT server, matches certificate
   const short mqttPort = 8883;                 // MQTT port
-  #define MSG_BUFFER_SIZE (50)
-  char topic[MSG_BUFFER_SIZE];
-  char msg[MSG_BUFFER_SIZE];
   // OTA variables
   const std::string updateServer = "update.ferndale";
   const short updateServerPort = 80;  // Caddy as http server from docker
 
-  // Structure to store connection information for ESP8266 'RTC' memory
-  // The ESP8266 RTC memory is arranged into blocks of 4 bytes. The access methods read and write 4 bytes at a time,
-  // so the RTC data structure should be a multiple of 4-byte.
+  // Structure to store connection information in ESP 'RTC' memory
+  // The ESP RTC memory is arranged into blocks of 4 bytes. The access methods read and write 4 bytes at a time,
+  // so the RTC data structure should be a multiple of 4-bytes.
   #ifdef ESP32
   typedef struct {
     uint16_t magic;     // 2 bytes
@@ -69,9 +68,8 @@ namespace mqtt_wifi {
   // Declare functions
   void wifiConnect();
   void wifiDisconnect();
-  void mqttSetCallback();
-  bool mqttInit();
-  bool mqttConnect();
+  void mqttSetCallback(std::string topicSub);
+  bool mqttConnect(std::string sensor);
   void mqttDisconnect();
   int8_t otaUpdate(std::string fileName);
   std::string timeToString(long timeStamp = -1);
@@ -98,6 +96,7 @@ namespace mqtt_wifi {
     if (rtcData.magic == RTCDATA_MAGIC) rtcValid = true;
 
     Serial.printf("-> WiFi start millis: %lu ms\n", millis());
+    Serial.printf("\nWiFi.status: %i\n", WiFi.status());
     WiFi.mode (WIFI_STA);
     if (rtcValid) {
       Serial.println("RTC OK, Try quick connection");
@@ -105,7 +104,7 @@ namespace mqtt_wifi {
       WiFi.config(rtcData.myIP, rtcData.gatewayIP, rtcData.subnet, rtcData.gatewayIP);   // ip, gateway, subnet, dns
       WiFi.begin(ssid, password, rtcData.channel, rtcData.bssid, true);
     } else {
-      Serial.println("First boot or RTC invalid, Try regular connection.");
+      Serial.println("First boot or RTC invalid, Try standard connection.");
       WiFi.begin( ssid, password, 0, NULL, true );
     }
     //Serial.printf("-> WiFi begin complete millis: %lu ms\n", millis());
@@ -114,15 +113,15 @@ namespace mqtt_wifi {
     unsigned long check_time = millis() + 5000;
     bool fastConnect = true;
     while(WiFi.status() != WL_CONNECTED) {
-      Serial.print(".");
+      Serial.print(":");
       if( millis() > check_time && fastConnect == true) {
         Serial.printf("\nWiFi.status: %i\n", WiFi.status());
-        Serial.println("WIFI not connected in 5s, trying standard connection.");
+        Serial.println("WIFI not up in 5s, try standard connection.");
         WiFi.begin( ssid, password, 0, NULL, true );
         fastConnect = false;
       }
       if( millis() > (check_time + 5000) ) {
-        Serial.println("\nWIFI not connected in 10s, try reboot");
+        Serial.println("\nWIFI not up in 10s, try reboot");
         delay(3000);
         ESP.restart();
       }
@@ -181,18 +180,18 @@ namespace mqtt_wifi {
     WiFi.mode(WIFI_OFF);
   }
 
-  void mqttSetCallback() {
-    // callback subscribes to mqttTopic only
-    Serial.printf("Callback set for %s\n", (mqttTopic + "set").c_str());
-    mqttClient.subscribe((mqttTopic + "set").c_str(), [](const String& payload, const size_t size) {
-    #ifdef MY_DEBUG
-      Serial.printf("\n>>Message to: %s = ", mqttTopic.c_str());
-      Serial.println(payload);
-    #endif
+  void mqttSetCallback(std::string topicSub) {
+    // callback subscribes to set topic only
+    topicSub += "set";
+    Serial.printf("Callback set for %s\n", topicSub.c_str());
+    mqttClient.subscribe(topicSub.c_str(), [](const String& payload, const size_t size) {
+    //Serial.printf("\n>>Message to: %s = ", topicSub.c_str());
+    Serial.println(payload);
     });
   }
 
-  bool mqttInit() {
+  bool mqttConnect(std::string sensor) {
+    unsigned short i;
     if (WiFi.status() != WL_CONNECTED) {
       wifiConnect();   // Connect to WiFi
       // mqttClient.begin only needed once per booted session.
@@ -203,8 +202,6 @@ namespace mqtt_wifi {
         delay(5000);
         ESP.restart();
       }
-      // MQTT callback init for subscribe, once per booted session
-      mqttSetCallback();
     }
     if (!tlsClient.connected()) {
       // Set up a secure connection to the MQTT server
@@ -217,7 +214,7 @@ namespace mqtt_wifi {
       tlsClient.setFingerprint(fingerprint);  // server cert fingerprint
       tlsClient.connect(mqttServer, mqttPort);
       #endif
-      unsigned char i = 0;
+      i = 0;
       // Try to connect for x * delay ms
       while (!tlsClient.connected()) {
         if (i >= 100) break;   // ~5s give up
@@ -226,12 +223,35 @@ namespace mqtt_wifi {
         i++;
         yield();
       }
+
       if (tlsClient.connected()) {
-        Serial.printf(" ->Connected.\n");
-        //Serial.printf("-> tlsClient connected millis: %lu ms\n", millis());
-        if (mqttConnect()) {
-          return true;
+        Serial.print(" ->Connected.\n");
+        // Connect the client to the MQTT server. Loop until connected, max. 5 times
+        i = 0;
+        Serial.print("Connecting MQTT client");
+        mqttClient.connect(sensor.c_str());
+        while ((!mqttClient.isConnected()) && (i < 5)) {
+          if (i == 1) {
+            mqttClient.disconnect();
+            mqttClient.connect(sensor.c_str());
+          }
+          if (i == 4) {
+            // Only print it once
+            Serial.printf(" ->Could not connect MQTT client, rc= %i\n", mqttClient.getLastError());
+            Serial.print("Rebooting now.");
+            delay(3000);
+            ESP.restart();
+          } else {
+            // Still connecting
+            Serial.print(".");
+            delay(50);
+            yield();
+          }
+          i++;
         }
+        Serial.printf("\n->Client %s is connected to %s.\n",sensor.c_str(), mqttServer);
+        return true;
+
       } else {
         //Get the last error for WiFiClientSecure
         char buf[200];
@@ -240,40 +260,10 @@ namespace mqtt_wifi {
         #elif defined(ESP8266)
         int lastErr = tlsClient.getLastSSLError(buf, sizeof(buf));
         #endif
-        Serial.printf(" ->Cannot connect, tlsClient error %i\n", lastErr);
+        Serial.printf(" ->tlsClient error %i\n", lastErr);
         return false;
       }
     }
-    return true;
-  }
-
-  // Connect the client to the MQTT server
-  bool mqttConnect() {
-    // Loop until we're connected, max. 5 times
-    unsigned char i = 0;
-    Serial.printf("Connecting MQTT client");
-    mqttClient.connect(loggerName.c_str());
-    while ((!mqttClient.isConnected()) && (i < 5)) {
-      if (i == 1) {
-        mqttClient.disconnect();
-        mqttClient.connect(loggerName.c_str());
-      }
-      if (i == 4) {
-        // Only print it once
-        Serial.printf("Could not connect MQTT client, rc= %i", mqttClient.getLastError());
-        delay(3000);
-        ESP.restart();
-      } else {
-        // Still connecting
-        Serial.print(".");
-        delay(50);
-        yield();
-      }
-      i++;
-    }
-    #ifdef MY_DEBUG
-      Serial.printf("\nClient %s is connected to %s.\n",loggerName.c_str(), mqttServer);
-    #endif
     return true;
   }
 
@@ -366,7 +356,7 @@ namespace mqtt_wifi {
     Serial.print("NTP sync");
     configTzTime(TZstr, ntpServer);
     time_t now = time(nullptr);
-    short i = 0;
+    unsigned short i = 0;
     while (now < 8 * 3600 * 2) {
       if (i > 100) {   // ~10s, give up
         return 0;
