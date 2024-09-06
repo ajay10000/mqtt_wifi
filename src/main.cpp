@@ -9,15 +9,15 @@
 // MQTT, WiFi & OTA Updates managed by mqtt_wifi_ota.h library with these variables
 const std::string updatePath = "/firmware/";    // /path/ on webserver to firmware update
 const std::string fwName = "test1_mqtt_ota";  // Firmware file name on webserver
-const std::string revName = "v2p";  // Full name including revision
+const std::string revName = "v2t";  // Full name including revision
 const std::string updateString = updatePath + fwName;
 const std::string loggerName = "test-1"; // Unique logger/MQTT client ID
 const std::string mqttTopicPrefix = "tester/";   // MQTT location/path. Leave empty for no path
 const std::string mqttTopic = mqttTopicPrefix + loggerName + "/";
 
 unsigned short sleepTime = 30;      // Loop/sleep delay in seconds
-bool sleepIsOn = true;          // loop instead of sleep
-unsigned short loopTime = 3;  // Loop timer when not sleeping
+bool sleepIsOn = false;          // loop instead of sleep
+unsigned short loopTime = 15;  // Loop timer when not sleeping
 unsigned long loopCount = 1;   // Track loop count if not sleeping
 const short ledPin = 33;    // ESP32 p18 LED_BUILTIN, ESP07/12 module is p2, ESP32-S2 p15
 const bool LEDOFF = LOW;   // NodeMCU LED inverted (HIGH)
@@ -33,6 +33,8 @@ const float V_THRESH = 4.5; // Minimum voltage to measure
 
 // Declare functions
 void ledBlink(short numTimes = 1, short delayTime = 200);
+void mqttSetCallback(std::string topicSub);
+void mqttSetCallbackAll(std::string topicSub);
 
 // Set a map for each item to later send to mqtt
 // Can also be used for debugging via mqtt
@@ -95,8 +97,6 @@ void loop() {
       sleepTime *= 5;   // Increase to conserve battery
     }
   }
-  // Add sleep time to MQTT messages map
-  sensor_values.insert({"sleep_time", std::to_string(sleepTime)});
 
   using namespace mqtt_wifi;
     if (sleepIsOn) {
@@ -106,12 +106,12 @@ void loop() {
       if (sleepIsOn) {
         Serial.printf("-> mqttConnect end millis: %lu ms\n", millis());
       }
-      // MQTT callback init for subscribe, once per booted session
-      mqttSetCallback(mqttTopic);
-      mqttClient.update();
       std::string timeNow = timeToString();
       int bc = rtcData.bootCount;
+      // Check if first boot or loop
       if (loopCount == 1 && (bc == 1)) {
+        // MQTT subscribe callback, only once per booted session
+        mqttSetCallback(mqttTopic + "set/+");
         sensor_values.insert({"ip", WiFi.localIP().toString().c_str()});
         sensor_values.insert({"fw_name", fwName});
         sensor_values.insert({"fw_version", revName});
@@ -119,10 +119,13 @@ void loop() {
         sensor_values.insert({"boot_count", std::to_string(bc)});
         sensor_values.insert({"sleep_on", std::to_string(sleepIsOn)});
       } else {
+        // Check subscriptions
+        mqttClient.update();
         sensor_values.insert({"rssi", std::to_string(WiFi.RSSI())});
         sensor_values.insert({"last_seen", timeNow});
         if (sleepIsOn) {
         sensor_values.insert({"boot_count", std::to_string(bc)});
+        sensor_values.insert({"sleep_time", std::to_string(sleepTime)});
         } else {
         sensor_values.insert({"loop_count", String(loopCount).c_str()});
         sensor_values.insert({"loop_time", String(loopTime).c_str()});
@@ -192,7 +195,7 @@ void loop() {
     #endif
   } else {
     // Delay loop
-    Serial.printf("-> Delay start millis: %lu ms\n", millis());
+    //Serial.printf("-> Delay start millis: %lu ms\n", millis());
     delay(loopTime * 1e3);   // Delay option, no sleep
   }
 }
@@ -204,4 +207,21 @@ void ledBlink(short numTimes, short delayTime) {
     digitalWrite (ledPin, LEDOFF);
     delay(delayTime);
   }
+}
+
+#define mqtt_firmware_update "tester/test-1/set/fw_update"
+// callback subscribes to specified topic
+void mqttSetCallback(std::string topicSub) {
+  Serial.printf("Callback set for %s\n", topicSub.c_str());
+  mqtt_wifi::mqttClient.subscribe(String(topicSub.c_str()), [&](const String& payload, const size_t size) {
+    Serial.printf("\n>>Message to topic %s: ", topicSub.c_str());
+    Serial.println(payload);
+    //mqtt_wifi::rtcData.sleepIsOn = payload.toInt();
+  });
+  mqtt_wifi::mqttClient.subscribe([](const String& topic, const String& payload, const size_t size) {
+    Serial.println(">> MQTT received: " + topic + " = " + payload);
+    if (topic == mqtt_firmware_update && payload.toInt() == 1) {
+    Serial.println(">> Received Firmware update request.");
+  }
+  });
 }

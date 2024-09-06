@@ -46,7 +46,7 @@ namespace mqtt_wifi {
     uint32_t myIP;   // Device IP#                             4 bytes
     uint32_t subnet;  // Subnet mask -                          4 bytes
     uint16_t bootCount;  // 2 bytes
-    uint8_t padding;      // 1 byte, 24 in total
+    uint8_t sleepIsOn;      // 1 byte, 24 in total
   } rtcDataStruct;
   RTC_DATA_ATTR rtcDataStruct rtcData;
   #elif defined(ESP8266)
@@ -60,7 +60,7 @@ namespace mqtt_wifi {
     uint32_t myIP;   // Device IP#                             4 bytes
     uint32_t subnet;  // Subnet mask -                          4 bytes
     uint16_t bootCount;  // 2 bytes
-    uint8_t padding;      // 1 byte, 24 in total
+    uint8_t sleepIsOn;      // 1 byte, 24 in total
   } rtcData;
   #endif
   const uint16_t RTCDATA_MAGIC = 0xF3ED;    // Magic number to check valid RTC read. 62445 decimal
@@ -68,7 +68,6 @@ namespace mqtt_wifi {
   // Declare functions
   void wifiConnect();
   void wifiDisconnect();
-  void mqttSetCallback(std::string topicSub);
   bool mqttConnect(std::string sensor);
   void mqttDisconnect();
   int8_t otaUpdate(std::string fileName);
@@ -149,7 +148,7 @@ namespace mqtt_wifi {
         rtcData.myIP = WiFi.localIP();
         rtcData.subnet = WiFi.subnetMask();
         rtcData.bootCount = 1;
-        rtcData.padding = 1;  // not used
+        rtcData.sleepIsOn = 0;  // not used
         // Disable WiFi persistence.  The ESP8266 will not load and save WiFi settings unnecessarily in the flash memory.
         WiFi.persistent(false);
         WiFi.setAutoReconnect(false);
@@ -178,16 +177,6 @@ namespace mqtt_wifi {
     WiFi.disconnect(true);
     delay(1);
     WiFi.mode(WIFI_OFF);
-  }
-
-  void mqttSetCallback(std::string topicSub) {
-    // callback subscribes to set topic only
-    topicSub += "set";
-    Serial.printf("Callback set for %s\n", topicSub.c_str());
-    mqttClient.subscribe(topicSub.c_str(), [](const String& payload, const size_t size) {
-    //Serial.printf("\n>>Message to: %s = ", topicSub.c_str());
-    Serial.println(payload);
-    });
   }
 
   bool mqttConnect(std::string sensor) {
