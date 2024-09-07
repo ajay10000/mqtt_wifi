@@ -20,7 +20,7 @@
 //#define MY_DEBUG
 
 namespace mqtt_wifi {
-  const std::string branch_rev_name = "MQTT_WiFi_OTA_v1w";
+  const std::string branch_rev_name = "MQTT_WiFi_OTA_v2a";
   // NTP Time variables
   const char* ntpServer = "ntp.openwrt.ferndale";   // Local router is set as ntp server
   // TZ string information: // https://www.gnu.org/software/libc/manual/html_node/TZ-Variable.html
@@ -48,7 +48,7 @@ namespace mqtt_wifi {
     uint16_t bootCount;  // 2 bytes
     uint8_t sleepIsOn;   // Sleep/loop switch, 1 byte, 24 in total
   } rtcDataStruct;
-  RTC_DATA_ATTR rtcDataStruct rtcData;
+  RTC_NOINIT_ATTR rtcDataStruct rtcData;    // Survives reset, alternative to RTC_DATA_ATTR
   #elif defined(ESP8266)
   const uint8_t RTCDATA_OFFSET = 120;       // Offset blocks (of 4 bytes), 127 is highest available (512 bytes)
                                             // 32 blocks will be lost after performing an OTA update
@@ -147,14 +147,13 @@ namespace mqtt_wifi {
         rtcData.gatewayIP = WiFi.gatewayIP();
         rtcData.myIP = WiFi.localIP();
         rtcData.subnet = WiFi.subnetMask();
-        rtcData.bootCount = 1;
+        rtcData.bootCount = 0;
         rtcData.sleepIsOn = 1;
         // Disable WiFi persistence.  The ESP8266 will not load and save WiFi settings unnecessarily in the flash memory.
         WiFi.persistent(false);
         WiFi.setAutoReconnect(false);
-      } else {
-        rtcData.bootCount++;    // RTC data OK, increment boot count
       }
+      rtcData.bootCount++;    // RTC data OK, increment boot count
       // ESP32 RTC update is automatic.
       #ifdef ESP8266
       ESP.rtcUserMemoryWrite(120, (uint32_t*)&rtcData, sizeof(rtcData));

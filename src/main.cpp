@@ -9,7 +9,7 @@
 // MQTT, WiFi & OTA Updates managed by mqtt_wifi_ota.h library with these variables
 const std::string updatePath = "/firmware/";    // /path/ on webserver to firmware update
 const std::string fwName = "test1_mqtt_ota";  // Firmware file name on webserver
-const std::string revName = "v2x";  // Full name including revision
+const std::string revName = "v3h";  // Full name including revision
 const std::string updateString = updatePath + fwName;
 const std::string loggerName = "test-1"; // Unique logger/MQTT client ID
 const std::string mqttTopicPrefix = "tester/";   // MQTT location/path. Leave empty for no path
@@ -35,12 +35,14 @@ const float V_THRESH = 4.5; // Minimum voltage to measure
 
 // Declare functions
 void ledBlink(short numTimes = 1, short delayTime = 200);
+void startOtaUpdate();
 void mqttSetCallback(std::string topicSub);
-void mqttSetCallbackAll(std::string topicSub);
 
 // Set a map for each item to later send to mqtt
 // Can also be used for debugging via mqtt
 std::map<std::string, std::string> sensor_values;
+
+using namespace mqtt_wifi;
 
 void setup() {
   #ifdef MY_DEBUG
@@ -100,90 +102,74 @@ void loop() {
     }
   }
 
-  using namespace mqtt_wifi;
-    //Serial.printf("-> mqttConnect start millis: %lu ms\n", millis());
-    if (mqttConnect(loggerName)) {
-      sleepIsOn = rtcData.sleepIsOn;  // Set sleep state from RTC memory
-      //Serial.printf("-> mqttConnect end millis: %lu ms\n", millis());
-      static std::string timeNow = timeToString();
-      static int bc = rtcData.bootCount;
-      // Check if first boot or loop
-      if (loopCount == 1 && (bc == 1)) {
-        // MQTT subscribe callback, only once per booted session
-        mqttSetCallback(mqttTopic + "set/+");
-        sensor_values.insert({"ip", WiFi.localIP().toString().c_str()});
-        sensor_values.insert({"fw_name", fwName});
-        sensor_values.insert({"fw_version", revName});
-        sensor_values.insert({"first_seen", timeNow});
-        sensor_values.insert({"loop_count", String(loopCount).c_str()});
-        sensor_values.insert({"boot_count", std::to_string(bc)});
-        sensor_values.insert({"sleep_on", std::to_string(sleepIsOn)});
-      } else {
-        // Check subscriptions
-        sensor_values.insert({"rssi", std::to_string(WiFi.RSSI())});
-        sensor_values.insert({"last_seen", timeNow});
-        if (sleepIsOn) {
-          // MQTT subscribe on every boot
-          mqttSetCallback(mqttTopic + "set/+");
-          sensor_values.insert({"boot_count", std::to_string(bc)});
-          sensor_values.insert({"sleep_time", std::to_string(sleepTime)});
-          Serial.print("Wait for any subscriptions");
-          for(int i = 0; i < 10; i++) {
-            mqttClient.update();  //Ensure mqtt subscription happens
-            Serial.print(",");
-            delay(50);
-            yield();
-            if (mqttMsgReceived) {
-              mqttMsgReceived = false;
-              exit;
-            }
-          }
-          Serial.println();
-        } else {
-          sensor_values.insert({"loop_count", String(loopCount).c_str()});
-          sensor_values.insert({"loop_time", String(loopTime).c_str()});
-        }
-      }
+  //Serial.printf("-> mqttConnect start millis: %lu ms\n", millis());
+  if (mqttConnect(loggerName)) {
+    //Serial.printf("-> mqttConnect end millis: %lu ms\n", millis());
+    sleepIsOn = rtcData.sleepIsOn;  // Set sleep state from RTC memory
+    std::string timeNow = timeToString();
+    int bc = rtcData.bootCount;
+    Serial.printf("bc is %d\n", bc);
 
-      // Check for OTA firmware update, every x cycles
-      if (loopCount % 10 == 0 || (bc % 10 == 0)) {
-        //Serial.printf("-> Start OTA update check millis: %lu ms\n", millis());
-        short updateStatus = otaUpdate(updateString);
-        if (updateStatus == 0) {
-          sensor_values.insert({"fw_updated", timeToString()});
-          reboot = true;
-        } else {
-          sensor_values.insert({"fw_status", std::to_string(updateStatus)});
-        }
-        //Serial.printf("-> OTA update check complete millis: %lu ms\n", millis());
-      }
-
-      // Blink LED every x loop cycles
-      if (loopCount % 10 == 0) ledBlink(2);
-      loopCount++;
-
-      // Publish MQTT messages to topics
-      #define MSG_BUFFER_SIZE (50)
-      static char topic[MSG_BUFFER_SIZE];
-      static char msg[MSG_BUFFER_SIZE];
-      for (auto [key, value] : sensor_values) {
-        snprintf (topic, sizeof(topic), "%s%s", mqttTopic.c_str(), key.c_str());
-        snprintf (msg, sizeof(msg), "%s", value.c_str());
-        #ifdef MY_DEBUG
-        Serial.printf("Sending: %s/%s\n", topic, msg);
-        #endif
-        mqttClient.publish(topic, msg);
-      }
-      //mqtt_disconnect();
+    // First boot or loop
+    if (loopCount == 1 && (bc == 1)) {
+      // MQTT subscribe callback, once per booted session
+      mqttSetCallback(mqttTopic + "set/+");
+      sensor_values.insert({"ip", WiFi.localIP().toString().c_str()});
+      sensor_values.insert({"fw_name", fwName});
+      sensor_values.insert({"fw_version", revName});
+      sensor_values.insert({"first_seen", timeNow});
+      sensor_values.insert({"loop_count", "1"});
+      sensor_values.insert({"boot_count", "1"});
+      //sensor_values.insert({"sleep_on", std::to_string(sleepIsOn)});
     } else {
-      Serial.print("Not connected to MQTT server.\n");
-      // Check for OTA update to potentially fix any MQTT issues
-      if (otaUpdate(updateString) == 0) {
-        Serial.printf("-> Found OTA update, millis: %lu ms\n", millis());
+      sensor_values.insert({"rssi", std::to_string(WiFi.RSSI())});
+      sensor_values.insert({"last_seen", timeNow});
+      if (sleepIsOn) {
+        // MQTT subscribe on every reboot after first
+        mqttSetCallback(mqttTopic + "set/+");
+        sensor_values.insert({"boot_count", std::to_string(bc)});
+        sensor_values.insert({"sleep_time", std::to_string(sleepTime)});
+      } else {
+        sensor_values.insert({"loop_count", String(loopCount).c_str()});
+        sensor_values.insert({"loop_time", String(loopTime).c_str()});
       }
-      reboot = true;
     }
-  // End using namespace mqtt_wifi
+    Serial.print("Checking for messages");
+    for(int i = 0; i < 10; i++) {
+      mqttClient.update();  //Loop to get all messages.
+      Serial.print(",");
+      delay(50);
+      yield();
+    }
+    Serial.println();
+
+    // Check for OTA firmware update, blink LED every x cycles
+    if (loopCount % 10 == 0 || (bc % 10 == 0)) {
+      ledBlink(2);
+      startOtaUpdate();
+    }
+
+    // Increment loopCount
+    if (!sleepIsOn)  loopCount++;
+
+    // Publish MQTT messages to topics
+    #define MSG_BUFFER_SIZE (50)
+    static char topic[MSG_BUFFER_SIZE];
+    static char msg[MSG_BUFFER_SIZE];
+    for (auto [key, value] : sensor_values) {
+      snprintf (topic, sizeof(topic), "%s%s", mqttTopic.c_str(), key.c_str());
+      snprintf (msg, sizeof(msg), "%s", value.c_str());
+      #ifdef MY_DEBUG
+      Serial.printf("Sending: %s/%s\n", topic, msg);
+      #endif
+      mqttClient.publish(topic, msg);
+    }
+    //mqtt_disconnect();
+  } else {
+    Serial.print("Not connected to MQTT server.\n");
+    // Check for OTA update to potentially fix any MQTT issues
+    startOtaUpdate();
+  }
 
   if (reboot) {
     #ifdef MY_DEBUG
@@ -222,36 +208,50 @@ void ledBlink(short numTimes, short delayTime) {
   }
 }
 
+void startOtaUpdate() {
+  //Serial.printf("-> Start OTA update check millis: %lu ms\n", millis());
+  short updateStatus = otaUpdate(updateString);
+  if (updateStatus == 0) {
+    Serial.print("-> Found OTA update\n");
+    sensor_values.insert({"fw_updated", timeToString()});
+    rtcData.bootCount = 0;
+    reboot = true;
+  } else {
+    sensor_values.insert({"fw_status", std::to_string(updateStatus)});
+  }
+  //Serial.printf("-> OTA update check complete millis: %lu ms\n", millis());
+}
+
 #define mqtt_firmware_update "tester/test-1/set/fw_update"
 #define mqtt_sleep "tester/test-1/set/sleep"
+
 // callback subscribes to specified topic
 void mqttSetCallback(std::string topicSub) {
   Serial.printf("Callback set for %s\n", topicSub.c_str());
-  mqtt_wifi::mqttClient.subscribe(String(topicSub.c_str()), [&](const String& payload, const size_t size) {
+  mqttClient.subscribe(String(topicSub.c_str()), [&](const String& payload, const size_t size) {
     Serial.printf("\n>>Message to topic %s: ", topicSub.c_str());
     Serial.println(payload);
-    //mqtt_wifi::rtcData.sleepIsOn = payload.toInt();
+    //rtcData.sleepIsOn = payload.toInt();
   });
-  mqtt_wifi::mqttClient.subscribe([](const String& topic, const String& payload, const size_t size) {
+  mqttClient.subscribe([](const String& topic, const String& payload, const size_t size) {
     Serial.println("\n>> MQTT received: " + topic + " = " + payload);
     if (topic == mqtt_firmware_update && payload.toInt() == 1) {
-      if (mqtt_wifi::otaUpdate(updateString) == 0) {
-        Serial.printf("-> Found OTA update, millis: %lu ms\n", millis());
-        reboot = true;
-      }
-      //sensor_values.insert({"set/fw_update", ""});   // clear message with retain flag
+      startOtaUpdate();
     }
+    //sensor_values.insert({"set/fw_update", ""});   // clear message with retain flag
+
     if (topic == mqtt_sleep) {
       sleepIsOn = payload.toInt();
-      Serial.printf("Sleep is %d, rtcData.sleepIsOn is %d\n", sleepIsOn, mqtt_wifi::rtcData.sleepIsOn);
-      if (!sleepIsOn == mqtt_wifi::rtcData.sleepIsOn) {
-        mqtt_wifi::rtcData.sleepIsOn = sleepIsOn;
-        if (sleepIsOn) {
-          reboot = true;
-        }
+      sensor_values.insert({"sleep_on", std::to_string(sleepIsOn)});
+      // Only change state if mqtt command has changed.
+      if (!(sleepIsOn == rtcData.sleepIsOn)) {
+        // Set sleep/loop vars
+        rtcData.sleepIsOn = sleepIsOn;
+        rtcData.bootCount = !sleepIsOn;
+        loopCount = sleepIsOn;
+        reboot = sleepIsOn;
       }
       //sensor_values.insert({"set/sleep", ""});   // clear message with retain flag
     }
-    mqttMsgReceived = true;
   });
 }
