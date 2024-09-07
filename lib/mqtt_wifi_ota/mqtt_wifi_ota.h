@@ -17,7 +17,7 @@
 #include <credentials.h>  // Private library
 // ssid, password and CA cert stored in credentials.h
 
-#define MY_DEBUG
+//#define MY_DEBUG
 
 namespace mqtt_wifi {
   const std::string branch_rev_name = "MQTT_WiFi_OTA_v1w";
@@ -46,7 +46,7 @@ namespace mqtt_wifi {
     uint32_t myIP;   // Device IP#                             4 bytes
     uint32_t subnet;  // Subnet mask -                          4 bytes
     uint16_t bootCount;  // 2 bytes
-    uint8_t sleepIsOn;      // 1 byte, 24 in total
+    uint8_t sleepIsOn;   // Sleep/loop switch, 1 byte, 24 in total
   } rtcDataStruct;
   RTC_DATA_ATTR rtcDataStruct rtcData;
   #elif defined(ESP8266)
@@ -148,7 +148,7 @@ namespace mqtt_wifi {
         rtcData.myIP = WiFi.localIP();
         rtcData.subnet = WiFi.subnetMask();
         rtcData.bootCount = 1;
-        rtcData.sleepIsOn = 0;  // not used
+        rtcData.sleepIsOn = 1;
         // Disable WiFi persistence.  The ESP8266 will not load and save WiFi settings unnecessarily in the flash memory.
         WiFi.persistent(false);
         WiFi.setAutoReconnect(false);
